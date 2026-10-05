@@ -1,4 +1,4 @@
-/* Abuja Lifestyle v2 – auth + realtime rooms */
+/* Abuja Lifestyle – no login. Local progress + realtime rooms as guest. */
 
 const LOCATIONS = [
   { id: 'wuse', name: 'Wuse Market', desc: 'Busy, loud, everything dey for sale.', emoji: '🛍️' },
@@ -51,14 +51,24 @@ const HUSTLES = [
   { id: 'content', name: 'Phone Content', pay: [400, 2500], energy: 10, belly: -3, desc: 'Skits. Algorithm decides.' },
 ];
 
+const BOUTIQUE = [
+  { id: 'shades', name: 'Designer Shades', emoji: '🕶️', price: 3500 },
+  { id: 'cap', name: 'Fitted Cap', emoji: '🧢', price: 2000 },
+  { id: 'chain', name: 'Gold Chain', emoji: '📿', price: 12000 },
+  { id: 'phone', name: 'Big Phone', emoji: '📱', price: 25000 },
+  { id: 'gele', name: 'Royal Gele', emoji: '👑', price: 8000 },
+  { id: 'sneakers', name: 'Fresh Sneakers', emoji: '👟', price: 9000 },
+  { id: 'watch', name: 'Wristwatch', emoji: '⌚', price: 18000 },
+];
+
+const STORAGE_KEY = 'abuja_noauth_v1';
+
 const STATE = {
-  token: localStorage.getItem('abuja_token') || null,
-  user: null,
   player: null,
-  guest: false,
   location: 'wuse',
   socket: null,
   roomPeople: [],
+  lastHustleAt: 0,
 };
 
 function $(s) { return document.querySelector(s); }
@@ -85,112 +95,52 @@ $('#modal-overlay').addEventListener('click', e => {
   if (e.target === $('#modal-overlay')) closeModal();
 });
 
-async function api(path, opts) {
-  opts = opts || {};
-  const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
-  if (STATE.token) headers.Authorization = 'Bearer ' + STATE.token;
-  const res = await fetch(path, Object.assign({}, opts, { headers: headers }));
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'Request failed');
-  return data;
+function save() {
+  if (!STATE.player) return;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      player: STATE.player,
+      location: STATE.location,
+      lastHustleAt: STATE.lastHustleAt,
+    }));
+  } catch (e) {}
+}
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) { return null; }
 }
 
-async function refreshStats() {
+async function refreshOnline() {
   try {
-    const d = await api('/api/stats');
+    const r = await fetch('/api/stats');
+    const d = await r.json();
     $('#online-count').textContent = d.online != null ? d.online : '—';
-    $('#user-count').textContent = d.registeredUsers != null ? d.registeredUsers : '—';
   } catch (e) {
     $('#online-count').textContent = '—';
   }
 }
-refreshStats();
-setInterval(refreshStats, 20000);
+refreshOnline();
+setInterval(refreshOnline, 20000);
 
-let authMode = 'login';
-document.querySelectorAll('.auth-tabs .tab').forEach(tab => {
-  tab.onclick = () => {
-    document.querySelectorAll('.auth-tabs .tab').forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
-    authMode = tab.dataset.tab;
-    $('#auth-submit').textContent = authMode === 'login' ? 'Login' : 'Create account';
-    $('#auth-email').style.display = authMode === 'register' ? 'block' : 'none';
-    $('#auth-error').textContent = '';
+// Intro
+const saved = load();
+if (saved && saved.player && saved.player.name) {
+  $('#btn-continue').style.display = 'block';
+  $('#saved-name').textContent = saved.player.name;
+  $('#btn-continue').onclick = () => {
+    STATE.player = saved.player;
+    STATE.location = saved.location || 'wuse';
+    STATE.lastHustleAt = saved.lastHustleAt || 0;
+    enterGame();
   };
-});
-
-$('#auth-form').onsubmit = async (e) => {
-  e.preventDefault();
-  const errEl = $('#auth-error');
-  errEl.textContent = '';
-  const username = ($('#auth-username').value || '').trim();
-  const password = $('#auth-password').value || '';
-  const email = ($('#auth-email').value || '').trim() || undefined;
-  const btn = $('#auth-submit');
-
-  if (username.length < 3 || username.length > 20) {
-    errEl.textContent = 'Username must be 3–20 characters.';
-    return;
-  }
-  if (!/^[a-zA-Z0-9_]+$/.test(username)) {
-    errEl.textContent = 'Username: only letters, numbers, underscore. No spaces.';
-    return;
-  }
-  if (password.length < 6) {
-    errEl.textContent = 'Password must be at least 6 characters.';
-    return;
-  }
-
-  btn.classList.add('loading');
-  btn.textContent = authMode === 'login' ? 'Logging in…' : 'Creating account…';
-  try {
-    const endpoint = authMode === 'login' ? '/api/login' : '/api/register';
-    const body = authMode === 'login'
-      ? { username: username, password: password }
-      : { username: username, password: password, email: email };
-    const data = await api(endpoint, { method: 'POST', body: JSON.stringify(body) });
-    STATE.token = data.token;
-    STATE.user = data.user;
-    STATE.guest = false;
-    localStorage.setItem('abuja_token', data.token);
-    await afterAuth();
-  } catch (err) {
-    errEl.textContent = err.message || 'Something went wrong. Try again.';
-    btn.classList.remove('loading');
-    btn.textContent = authMode === 'login' ? 'Login' : 'Create account';
-  }
-};
-
-$('#btn-guest').onclick = () => {
-  STATE.guest = true;
-  STATE.token = null;
-  STATE.user = null;
-  localStorage.removeItem('abuja_token');
-  showScreen('screen-create');
-};
-
-async function afterAuth() {
-  try {
-    const me = await api('/api/me');
-    STATE.user = me.user;
-    STATE.player = me.player;
-    if (!me.player.name || me.player.name === 'Player') {
-      showScreen('screen-create');
-      if (me.user && me.user.username) $('#player-name').value = me.user.username;
-    } else {
-      enterGame();
-    }
-  } catch (e) {
-    localStorage.removeItem('abuja_token');
-    STATE.token = null;
-    toast('Session expired. Login again.');
-  }
 }
 
-if (STATE.token) {
-  afterAuth().catch(() => {});
-}
+$('#btn-play').onclick = () => showScreen('screen-create');
 
+// Character
 let chosenGender = null;
 let chosenLook = null;
 
@@ -201,7 +151,6 @@ document.querySelectorAll('.gender-btn').forEach(btn => {
     chosenGender = btn.dataset.gender;
     chosenLook = null;
     renderLooks();
-    // Auto-select first look so Enter Abuja is easier
     const first = LOOKS[chosenGender] && LOOKS[chosenGender][0];
     if (first) {
       chosenLook = first.id;
@@ -223,7 +172,9 @@ function renderLooks() {
     grid.appendChild(card);
   });
 }
+
 $('#player-name').oninput = checkCreateReady;
+
 function checkCreateReady() {
   const name = $('#player-name').value.trim();
   const ready = !!(chosenGender && chosenLook && name.length >= 2);
@@ -235,35 +186,35 @@ function checkCreateReady() {
   else btn.textContent = 'Enter Abuja';
 }
 
-$('#btn-enter').onclick = async () => {
+$('#btn-enter').onclick = () => {
   const name = $('#player-name').value.trim();
   const look = LOOKS[chosenGender].find(l => l.id === chosenLook);
-  if (STATE.guest) {
-    STATE.player = {
-      name: name, gender: chosenGender, look_id: look.id, look_emoji: look.emoji,
-      money: 2500 + Math.floor(Math.random() * 5000),
-      belly: 80, energy: 80, vibe: 60, fame: 0, location: 'wuse',
-    };
-    enterGame();
-    return;
-  }
-  try {
-    const data = await api('/api/player', {
-      method: 'POST',
-      body: JSON.stringify({ name: name, gender: chosenGender, look_id: look.id, look_emoji: look.emoji }),
-    });
-    STATE.player = data.player;
-    enterGame();
-  } catch (e) {
-    toast(e.message);
-  }
+  const starts = [2500, 8000, 1500, 20000, 500];
+  const money = starts[Math.floor(Math.random() * starts.length)];
+  STATE.player = {
+    name: name,
+    gender: chosenGender,
+    look_id: look.id,
+    look_emoji: look.emoji,
+    money: money,
+    belly: 70 + Math.floor(Math.random() * 20),
+    energy: 75 + Math.floor(Math.random() * 20),
+    vibe: 50 + Math.floor(Math.random() * 30),
+    fame: 0,
+    inventory: [],
+    location: 'wuse',
+  };
+  STATE.location = 'wuse';
+  save();
+  toast('You start with ₦' + money.toLocaleString());
+  enterGame();
 };
 
 function enterGame() {
   showScreen('screen-game');
   updateStats();
   connectSocket();
-  setLocation(STATE.player.location || 'wuse');
+  setLocation(STATE.player.location || STATE.location || 'wuse');
   setInterval(() => {
     if (!STATE.player) return;
     STATE.player.belly = Math.max(0, STATE.player.belly - 0.35);
@@ -272,8 +223,8 @@ function enterGame() {
       STATE.player.vibe = Math.max(0, STATE.player.vibe - 0.4);
     }
     updateStats();
+    save();
   }, 8000);
-  setInterval(savePlayer, 30000);
 }
 
 function updateStats() {
@@ -290,19 +241,6 @@ function setBar(id, val) {
   el.classList.toggle('low', val < 25);
 }
 
-async function savePlayer() {
-  if (STATE.guest || !STATE.token || !STATE.player) return;
-  try {
-    await api('/api/player', {
-      method: 'PUT',
-      body: JSON.stringify({
-        money: STATE.player.money, belly: STATE.player.belly, energy: STATE.player.energy,
-        vibe: STATE.player.vibe, fame: STATE.player.fame, location: STATE.player.location, name: STATE.player.name,
-      }),
-    });
-  } catch (e) {}
-}
-
 function setLocation(id) {
   STATE.location = id;
   if (STATE.player) STATE.player.location = id;
@@ -313,9 +251,13 @@ function setLocation(id) {
   renderPeople();
   addChat('system', 'You arrived at ' + loc.name + '.');
   if (STATE.socket && STATE.socket.connected) {
-    STATE.socket.emit('join', { location: id, name: STATE.player.name, look_emoji: STATE.player.look_emoji });
+    STATE.socket.emit('join', {
+      location: id,
+      name: STATE.player.name,
+      look_emoji: STATE.player.look_emoji,
+    });
   }
-  savePlayer();
+  save();
 }
 
 function renderPeople() {
@@ -330,36 +272,40 @@ function renderPeople() {
     list.appendChild(el);
   });
   STATE.roomPeople.forEach(p => {
-    if (STATE.user && p.userId === STATE.user.id) return;
     const el = document.createElement('div');
     el.className = 'person';
-    el.innerHTML = '<div class="p-emoji">' + (p.look_emoji || '👤') + '</div><div class="p-name">' + p.name + '</div><div class="p-tag">' + (p.guest ? 'Guest' : 'Online') + '</div>';
-    el.onclick = () => openPerson({ name: p.name, emoji: p.look_emoji, userId: p.userId, isNpc: false, guest: p.guest });
+    el.innerHTML = '<div class="p-emoji">' + (p.look_emoji || '👤') + '</div><div class="p-name">' + p.name + '</div><div class="p-tag">Online</div>';
+    el.onclick = () => openPerson({ name: p.name, emoji: p.look_emoji, isNpc: false });
     list.appendChild(el);
   });
   $('#loc-people').textContent = (STATE.roomPeople.length + npcs.length) + ' here';
 }
 
 function openPerson(p) {
-  const safeName = (p.name || '').replace(/'/g, "\\'");
-  openModal('<div class="close-row"><h3>' + (p.emoji || '👤') + ' ' + p.name + '</h3><button class="close-x" onclick="closeModal()">✕</button></div>' +
-    '<p>' + (p.isNpc ? 'NPC – part of the city.' : (p.guest ? 'Guest player.' : 'Real player online.')) + '</p>' +
+  const safe = (p.name || '').replace(/'/g, "\\'");
+  openModal(
+    '<div class="close-row"><h3>' + (p.emoji || '👤') + ' ' + p.name + '</h3><button class="close-x" onclick="closeModal()">✕</button></div>' +
+    '<p>' + (p.isNpc ? 'NPC – part of the city.' : 'Player in this spot.') + '</p>' +
     '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-    '<button class="btn primary small" onclick="doSpray(\'' + (p.userId || '') + '\',\'' + safeName + '\')">💸 Spray</button>' +
-    '<button class="btn ghost small" onclick="closeModal();toast(\'' + safeName + ' nodded back.\')">👋 Wave</button></div>');
+    '<button class="btn primary small" onclick="doSpray(\'' + safe + '\')">💸 Spray</button>' +
+    '<button class="btn ghost small" onclick="closeModal();toast(\'' + safe + ' nodded back.\')">👋 Wave</button></div>'
+  );
 }
 
-window.doSpray = async function (targetUserId, targetName) {
-  if (STATE.guest) { toast('Login to spray.'); return; }
-  try {
-    const data = await api('/api/action/spray', { method: 'POST', body: JSON.stringify({ amount: 200 }) });
-    STATE.player = data.player;
-    updateStats();
-    closeModal();
-    addChat('you', 'You sprayed ₦' + data.amount + ' on ' + targetName + ' 💸');
-    toast('You sprayed ₦' + data.amount + '!');
-    if (STATE.socket && STATE.socket.connected) STATE.socket.emit('spray_broadcast', { amount: data.amount });
-  } catch (e) { toast(e.message); }
+window.doSpray = function (targetName) {
+  const amount = 200;
+  if (STATE.player.money < amount) { toast('Your pocket dry. Go hustle.'); return; }
+  STATE.player.money -= amount;
+  STATE.player.vibe = Math.min(100, STATE.player.vibe + 8);
+  STATE.player.fame = (STATE.player.fame || 0) + 1;
+  updateStats();
+  save();
+  closeModal();
+  addChat('you', 'You sprayed ₦' + amount + ' on ' + targetName + ' 💸');
+  toast('You sprayed ₦' + amount + '!');
+  if (STATE.socket && STATE.socket.connected) {
+    STATE.socket.emit('spray_broadcast', { amount: amount });
+  }
 };
 
 function addChat(who, text) {
@@ -376,12 +322,14 @@ function addChat(who, text) {
 
 function connectSocket() {
   if (STATE.socket) STATE.socket.disconnect();
-  const opts = { transports: ['websocket', 'polling'] };
-  if (STATE.token) opts.auth = { token: STATE.token };
-  STATE.socket = io(opts);
-
+  if (typeof io === 'undefined') return;
+  STATE.socket = io({ transports: ['websocket', 'polling'] });
   STATE.socket.on('connect', () => {
-    STATE.socket.emit('join', { location: STATE.location, name: STATE.player && STATE.player.name, look_emoji: STATE.player && STATE.player.look_emoji });
+    STATE.socket.emit('join', {
+      location: STATE.location,
+      name: STATE.player && STATE.player.name,
+      look_emoji: STATE.player && STATE.player.look_emoji,
+    });
   });
   STATE.socket.on('hello', d => { if (d.online != null) $('#online-count').textContent = d.online; });
   STATE.socket.on('online', d => { if (d.online != null) $('#online-count').textContent = d.online; });
@@ -391,7 +339,10 @@ function connectSocket() {
     if (d.online != null) $('#online-count').textContent = d.online;
   });
   STATE.socket.on('presence', d => {
-    if (d.location === STATE.location) { STATE.roomPeople = d.people || []; renderPeople(); }
+    if (d.location === STATE.location) {
+      STATE.roomPeople = d.people || [];
+      renderPeople();
+    }
     if (d.online != null) $('#online-count').textContent = d.online;
   });
   STATE.socket.on('chat', msg => {
@@ -400,8 +351,6 @@ function connectSocket() {
   });
   STATE.socket.on('spray', msg => { addChat('system', msg.from + ' sprayed ₦' + msg.amount + ' 💸'); });
   STATE.socket.on('react', msg => { addChat(msg.name, msg.emoji); });
-  STATE.socket.on('chat_error', d => toast(d.error || 'Cannot send'));
-  STATE.socket.on('spray_error', d => toast(d.error || 'Cannot spray'));
 }
 
 $('#reactions').addEventListener('click', e => {
@@ -431,21 +380,16 @@ function openMap() {
   ).join('');
   openModal('<div class="close-row"><h3>🗺️ Abuja Map</h3><button class="close-x" onclick="closeModal()">✕</button></div><p>Where you wan go?</p>' + items);
 }
-window.goTo = async function (id) {
-  if (STATE.guest) {
-    closeModal();
-    setLocation(id);
-    toast('Guest travel (not saved).');
-    return;
-  }
-  try {
-    const data = await api('/api/action/travel', { method: 'POST', body: JSON.stringify({ locationId: id }) });
-    STATE.player = data.player;
-    updateStats();
-    closeModal();
-    setLocation(id);
-    toast('Bus ₦' + data.cost + '. You don reach.');
-  } catch (e) { toast(e.message); }
+window.goTo = function (id) {
+  const cost = 150 + Math.floor(Math.random() * 200);
+  if (STATE.player.money < cost) { toast('No money for transport.'); return; }
+  STATE.player.money -= cost;
+  STATE.player.energy = Math.max(0, STATE.player.energy - 5);
+  updateStats();
+  closeModal();
+  setLocation(id);
+  toast('Bus ₦' + cost + '. You don reach.');
+  save();
 };
 
 function openHustle() {
@@ -454,22 +398,30 @@ function openHustle() {
   ).join('');
   openModal('<div class="close-row"><h3>💼 Hustle</h3><button class="close-x" onclick="closeModal()">✕</button></div><p>Make money. Energy go down.</p>' + items);
 }
-window.doHustle = async function (id) {
-  if (STATE.guest) { toast('Login to hustle for real.'); return; }
-  try {
-    const data = await api('/api/action/hustle', { method: 'POST', body: JSON.stringify({ hustleId: id }) });
-    STATE.player = data.player;
-    updateStats();
-    closeModal();
-    addChat('you', 'Finished ' + data.hustle + '. +₦' + data.pay.toLocaleString());
-    toast('+₦' + data.pay.toLocaleString() + ' 💰');
-  } catch (e) { toast(e.message); }
+window.doHustle = function (id) {
+  const h = HUSTLES.find(x => x.id === id);
+  const p = STATE.player;
+  if (p.energy < h.energy) { toast('You tire. Rest or chop first.'); return; }
+  if (Date.now() - STATE.lastHustleAt < 15000) { toast('Rest small before next hustle.'); return; }
+  const pay = h.pay[0] + Math.floor(Math.random() * (h.pay[1] - h.pay[0]));
+  p.money += pay;
+  p.energy = Math.max(0, p.energy - h.energy);
+  p.belly = Math.max(0, p.belly + h.belly);
+  p.vibe = Math.min(100, p.vibe + 3);
+  STATE.lastHustleAt = Date.now();
+  updateStats();
+  closeModal();
+  addChat('you', 'Finished ' + h.name + '. +₦' + pay.toLocaleString());
+  toast('+₦' + pay.toLocaleString() + ' 💰');
+  save();
 };
 
 function openTalk() {
-  openModal('<div class="close-row"><h3>💬 Talk</h3><button class="close-x" onclick="closeModal()">✕</button></div><p>Realtime chat at this spot.</p>' +
+  openModal(
+    '<div class="close-row"><h3>💬 Talk</h3><button class="close-x" onclick="closeModal()">✕</button></div><p>Chat with people at this spot.</p>' +
     '<input type="text" id="talk-input" placeholder="Type your gist..." maxlength="120" style="width:100%;padding:12px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:1rem;margin-bottom:12px;font-family:inherit" />' +
-    '<button class="btn primary full" onclick="sendTalk()">Send</button>');
+    '<button class="btn primary full" onclick="sendTalk()">Send</button>'
+  );
   setTimeout(() => { const i = $('#talk-input'); if (i) i.focus(); }, 80);
 }
 window.sendTalk = function () {
@@ -485,251 +437,98 @@ window.sendTalk = function () {
 };
 
 function openFlex() {
-  openModal('<div class="close-row"><h3>💸 Flex</h3><button class="close-x" onclick="closeModal()">✕</button></div>' +
+  openModal(
+    '<div class="close-row"><h3>💸 Flex</h3><button class="close-x" onclick="closeModal()">✕</button></div>' +
     '<div class="list-item" onclick="doSprayRandom()"><div class="li-emoji">💸</div><div class="li-body"><div class="li-title">Spray the room</div><div class="li-sub">₦200 into the crowd</div></div></div>' +
     '<div class="list-item" onclick="buyFood()"><div class="li-emoji">🍛</div><div class="li-body"><div class="li-title">Chop something</div><div class="li-sub">Fill belly</div></div><div class="li-right">₦800–1,500</div></div>' +
-    '<div class="list-item" onclick="rest()"><div class="li-emoji">😴</div><div class="li-body"><div class="li-title">Rest small</div><div class="li-sub">Recover energy</div></div></div>');
+    '<div class="list-item" onclick="rest()"><div class="li-emoji">😴</div><div class="li-body"><div class="li-title">Rest small</div><div class="li-sub">Recover energy</div></div></div>' +
+    '<div class="list-item" onclick="openBoutique()"><div class="li-emoji">🛍️</div><div class="li-body"><div class="li-title">Boutique</div><div class="li-sub">Buy drip</div></div></div>'
+  );
 }
-window.doSprayRandom = async function () {
+window.doSprayRandom = function () {
   closeModal();
-  if (STATE.guest) { toast('Login to spray.'); return; }
-  try {
-    const data = await api('/api/action/spray', { method: 'POST', body: JSON.stringify({ amount: 200 }) });
-    STATE.player = data.player;
-    updateStats();
-    addChat('you', 'You sprayed ₦' + data.amount + ' into the crowd 💸🔥');
-    toast('E choke!');
-    if (STATE.socket) STATE.socket.emit('spray_broadcast', { amount: data.amount });
-  } catch (e) { toast(e.message); }
+  if (STATE.player.money < 200) { toast('Pocket dry.'); return; }
+  STATE.player.money -= 200;
+  STATE.player.vibe = Math.min(100, STATE.player.vibe + 10);
+  STATE.player.fame = (STATE.player.fame || 0) + 2;
+  updateStats();
+  addChat('you', 'You sprayed ₦200 into the crowd 💸🔥');
+  toast('E choke!');
+  if (STATE.socket) STATE.socket.emit('spray_broadcast', { amount: 200 });
+  save();
 };
-window.buyFood = async function () {
-  if (STATE.guest) { toast('Login to chop (saved).'); return; }
-  try {
-    const data = await api('/api/action/food', { method: 'POST', body: '{}' });
-    STATE.player = data.player;
-    updateStats();
-    closeModal();
-    toast('Chop done. ₦' + data.cost);
-  } catch (e) { toast(e.message); }
+window.buyFood = function () {
+  const cost = 800 + Math.floor(Math.random() * 700);
+  if (STATE.player.money < cost) { toast('No money for food.'); return; }
+  STATE.player.money -= cost;
+  STATE.player.belly = Math.min(100, STATE.player.belly + 40);
+  STATE.player.energy = Math.min(100, STATE.player.energy + 10);
+  updateStats();
+  closeModal();
+  toast('Chop done. ₦' + cost);
+  save();
 };
-window.rest = async function () {
-  if (STATE.guest) {
-    STATE.player.energy = Math.min(100, STATE.player.energy + 25);
-    updateStats();
-    closeModal();
-    toast('You rest.');
-    return;
-  }
-  try {
-    const data = await api('/api/action/rest', { method: 'POST', body: '{}' });
-    STATE.player = data.player;
-    updateStats();
-    closeModal();
-    toast('You rest. Energy up.');
-  } catch (e) { toast(e.message); }
+window.rest = function () {
+  STATE.player.energy = Math.min(100, STATE.player.energy + 25);
+  STATE.player.vibe = Math.min(100, STATE.player.vibe + 5);
+  updateStats();
+  closeModal();
+  toast('You rest. Energy up.');
+  save();
 };
 
-function openMore() {
-  const p = STATE.player;
-  const u = STATE.user;
-  let extra = '';
-  if (!STATE.guest) {
-    extra = '<div class="list-item" onclick="logout()"><div class="li-emoji">🚪</div><div class="li-body"><div class="li-title">Log out</div><div class="li-sub">Sign out of this device</div></div></div>';
-  } else {
-    extra = '<div class="list-item" onclick="location.reload()"><div class="li-emoji">🔑</div><div class="li-body"><div class="li-title">Create account</div><div class="li-sub">Save progress properly</div></div></div>';
-  }
-  openModal('<div class="close-row"><h3>⋯ More</h3><button class="close-x" onclick="closeModal()">✕</button></div>' +
-    '<p><strong>' + p.look_emoji + ' ' + p.name + '</strong>' + (u ? ' · @' + u.username : ' · Guest') + ' · Fame ' + (p.fame || 0) + '</p>' +
-    '<div class="list-item" onclick="window.location=\'/rules.html\'"><div class="li-emoji">📜</div><div class="li-body"><div class="li-title">House rules</div><div class="li-sub">Be kind. No scams.</div></div></div>' + extra);
-}
-window.logout = function () {
-  localStorage.removeItem('abuja_token');
-  if (STATE.socket) STATE.socket.disconnect();
-  location.reload();
-};
-$('#btn-phone').onclick = openMore;
-
-
-/* ===== v4 boutique + leaderboard ===== */
-window.openBoutique = async function () {
-  let items = [];
-  try {
-    const cat = await api('/api/catalog');
-    items = cat.boutique || [];
-  } catch (e) {
-    toast('Could not load boutique');
-    return;
-  }
-  const inv = (STATE.player && STATE.player.inventory) || [];
-  const html = items.map(it => {
+window.openBoutique = function () {
+  const inv = STATE.player.inventory || [];
+  const html = BOUTIQUE.map(it => {
     const owned = inv.includes(it.id);
     const action = owned
       ? '<button class="btn ghost small" onclick="doEquip(\'' + it.id + '\')">Equip</button>'
       : '<button class="btn primary small" onclick="doBuy(\'' + it.id + '\')">Buy ₦' + it.price.toLocaleString() + '</button>';
-    return '<div class="list-item"><div class="li-emoji">' + it.emoji + '</div><div class="li-body"><div class="li-title">' + it.name + '</div><div class="li-sub">' + (owned ? 'Owned' : 'Boutique') + '</div></div><div class="li-right">' + action + '</div></div>';
+    return '<div class="list-item"><div class="li-emoji">' + it.emoji + '</div><div class="li-body"><div class="li-title">' + it.name + '</div><div class="li-sub">' + (owned ? 'Owned' : 'For sale') + '</div></div><div class="li-right">' + action + '</div></div>';
   }).join('');
-  openModal('<div class="close-row"><h3>🛍️ Boutique</h3><button class="close-x" onclick="closeModal()">✕</button></div><p>Everyone can see what you equip.</p>' + html);
+  openModal('<div class="close-row"><h3>🛍️ Boutique</h3><button class="close-x" onclick="closeModal()">✕</button></div><p>Buy drip. Progress saves on this device.</p>' + html);
 };
-
-window.doBuy = async function (itemId) {
-  if (STATE.guest) { toast('Login to buy drip.'); return; }
-  try {
-    const data = await api('/api/action/buy', { method: 'POST', body: JSON.stringify({ itemId: itemId }) });
-    STATE.player = data.player;
-    updateStats();
-    toast('Bought ' + data.item.name + '!');
-    openBoutique();
-  } catch (e) { toast(e.message); }
+window.doBuy = function (itemId) {
+  const item = BOUTIQUE.find(x => x.id === itemId);
+  if (!item) return;
+  const inv = STATE.player.inventory || [];
+  if (inv.includes(itemId)) { toast('You already own this.'); return; }
+  if (STATE.player.money < item.price) { toast('Not enough money.'); return; }
+  STATE.player.money -= item.price;
+  inv.push(itemId);
+  STATE.player.inventory = inv;
+  STATE.player.vibe = Math.min(100, STATE.player.vibe + 5);
+  updateStats();
+  save();
+  toast('Bought ' + item.name + '!');
+  openBoutique();
 };
-
-window.doEquip = async function (itemId) {
-  if (STATE.guest) return;
-  try {
-    const data = await api('/api/action/equip', { method: 'POST', body: JSON.stringify({ itemId: itemId }) });
-    STATE.player = data.player;
-    updateStats();
-    toast('Equipped ' + data.item.name);
-    if (STATE.socket) STATE.socket.emit('join', { location: STATE.location, name: STATE.player.name, look_emoji: STATE.player.look_emoji });
-    openBoutique();
-  } catch (e) { toast(e.message); }
-};
-
-window.openLeaderboard = async function () {
-  try {
-    const data = await api('/api/leaderboard');
-    const rows = (data.top || []).map((r, i) =>
-      '<div class="list-item"><div class="li-emoji">' + (r.look_emoji || '👤') + '</div><div class="li-body"><div class="li-title">#' + (i+1) + ' ' + r.name + '</div><div class="li-sub">Fame ' + r.fame + '</div></div><div class="li-right">₦' + Math.floor(r.money).toLocaleString() + '</div></div>'
-    ).join('') || '<p>No one on the board yet.</p>';
-    openModal('<div class="close-row"><h3>🏆 Fame board</h3><button class="close-x" onclick="closeModal()">✕</button></div>' + rows);
-  } catch (e) { toast(e.message); }
-};
-
-// Patch openMore to include boutique links - override
-const _openMoreOrig = openMore;
-openMore = function () {
-  const p = STATE.player;
-  const u = STATE.user;
-  let extra = '';
-  if (!STATE.guest) {
-    extra = '<div class="list-item" onclick="logout()"><div class="li-emoji">🚪</div><div class="li-body"><div class="li-title">Log out</div><div class="li-sub">Sign out of this device</div></div></div>';
-  } else {
-    extra = '<div class="list-item" onclick="location.reload()"><div class="li-emoji">🔑</div><div class="li-body"><div class="li-title">Create account</div><div class="li-sub">Save progress properly</div></div></div>';
+window.doEquip = function (itemId) {
+  const item = BOUTIQUE.find(x => x.id === itemId);
+  if (!item) return;
+  STATE.player.look_emoji = item.emoji;
+  updateStats();
+  save();
+  toast('Equipped ' + item.name);
+  if (STATE.socket) {
+    STATE.socket.emit('join', { location: STATE.location, name: STATE.player.name, look_emoji: STATE.player.look_emoji });
   }
-  openModal('<div class="close-row"><h3>⋯ More</h3><button class="close-x" onclick="closeModal()">✕</button></div>' +
-    '<p><strong>' + p.look_emoji + ' ' + p.name + '</strong>' + (u ? ' · @' + u.username : ' · Guest') + ' · Fame ' + (p.fame || 0) + '</p>' +
-    '<div class="list-item" onclick="openBoutique()"><div class="li-emoji">🛍️</div><div class="li-body"><div class="li-title">Boutique</div><div class="li-sub">Shades, chains, gele, phones</div></div></div>' +
-    '<div class="list-item" onclick="openLeaderboard()"><div class="li-emoji">🏆</div><div class="li-body"><div class="li-title">Fame board</div><div class="li-sub">Top players in Abuja</div></div></div>' +
-    '<div class="list-item" onclick="window.location=\'/rules.html\'"><div class="li-emoji">📜</div><div class="li-body"><div class="li-title">House rules</div><div class="li-sub">Be kind. No scams.</div></div></div>' + extra);
+  openBoutique();
 };
 
-
-/* ===== v5 events + friends + DMs ===== */
-window.openEvents = async function () {
-  try {
-    const data = await api('/api/events');
-    const active = data.active;
-    const board = (data.board || []).slice(0, 8).map((r) =>
-      '<div class="list-item"><div class="li-emoji">' + (r.look_emoji || '👤') + '</div><div class="li-body"><div class="li-title">#' + r.rank + ' ' + r.name + '</div><div class="li-sub">Event sprays</div></div><div class="li-right">₦' + Math.floor(r.total).toLocaleString() + '</div></div>'
-    ).join('') || '<p class="tiny">No sprays yet this event. Be first!</p>';
-    const others = (data.events || []).map((e) =>
-      '<div class="list-item"><div class="li-emoji">' + e.emoji + '</div><div class="li-body"><div class="li-title">' + e.name + (e.active ? ' · LIVE' : '') + '</div><div class="li-sub">' + e.desc + ' · ' + e.location + '</div></div></div>'
-    ).join('');
-    openModal('<div class="close-row"><h3>' + active.emoji + ' Events</h3><button class="close-x" onclick="closeModal()">✕</button></div>' +
-      '<p><strong>' + active.name + '</strong> is live at <strong>' + active.location + '</strong>. Go there and spray to climb the board.</p>' +
-      '<h3 style="margin:12px 0 8px;font-size:1rem">Today\'s board</h3>' + board +
-      '<h3 style="margin:16px 0 8px;font-size:1rem">All events</h3>' + others);
-  } catch (e) { toast(e.message); }
-};
-
-window.openFriends = async function () {
-  if (STATE.guest) { toast('Login to use friends.'); return; }
-  try {
-    const data = await api('/api/friends');
-    const pendingIn = (data.pending && data.pending.incoming || []).map((r) =>
-      '<div class="list-item"><div class="li-emoji">' + (r.look_emoji || '👤') + '</div><div class="li-body"><div class="li-title">@' + r.username + '</div><div class="li-sub">' + (r.name || '') + ' · request</div></div>' +
-      '<div class="li-right"><button class="btn primary small" onclick="respondFriend(\'' + r.id + '\',true)">Accept</button></div></div>'
-    ).join('');
-    const friends = (data.friends || []).map((r) =>
-      '<div class="list-item" onclick="openDM(\'' + r.userId + '\',\'' + (r.username || '').replace(/'/g, '') + '\')"><div class="li-emoji">' + (r.look_emoji || '👤') + '</div><div class="li-body"><div class="li-title">' + (r.name || r.username) + '</div><div class="li-sub">@' + r.username + (r.location ? ' · ' + r.location : '') + '</div></div><div class="li-right">💬</div></div>'
-    ).join('') || '<p class="tiny">No friends yet. Add someone by username.</p>';
-    openModal('<div class="close-row"><h3>👥 Friends</h3><button class="close-x" onclick="closeModal()">✕</button></div>' +
-      '<div style="display:flex;gap:8px;margin-bottom:12px"><input id="friend-user" placeholder="Username to add" maxlength="20" style="flex:1;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-family:inherit" />' +
-      '<button class="btn primary small" onclick="sendFriendReq()">Add</button></div>' +
-      (pendingIn ? '<h3 style="font-size:0.95rem;margin-bottom:6px">Requests</h3>' + pendingIn : '') +
-      '<h3 style="font-size:0.95rem;margin:12px 0 6px">Your people</h3>' + friends);
-  } catch (e) { toast(e.message); }
-};
-
-window.sendFriendReq = async function () {
-  const input = document.getElementById('friend-user');
-  const username = (input && input.value || '').trim();
-  if (!username) return;
-  try {
-    await api('/api/friends/request', { method: 'POST', body: JSON.stringify({ username: username }) });
-    toast('Request sent to @' + username);
-    openFriends();
-  } catch (e) { toast(e.message); }
-};
-
-window.respondFriend = async function (id, accept) {
-  try {
-    await api('/api/friends/respond', { method: 'POST', body: JSON.stringify({ friendshipId: id, accept: accept }) });
-    toast(accept ? 'Friends now!' : 'Declined');
-    openFriends();
-  } catch (e) { toast(e.message); }
-};
-
-window.openDM = async function (otherId, username) {
-  try {
-    const data = await api('/api/messages/' + otherId);
-    const msgs = (data.messages || []).map((m) =>
-      '<div class="chat-msg' + (m.fromMe ? '' : '') + '"><span class="who">' + (m.fromMe ? 'You' : '@' + username) + '</span>' + m.body + '</div>'
-    ).join('') || '<p class="tiny">No messages yet. Say how body.</p>';
-    openModal('<div class="close-row"><h3>💬 @' + username + '</h3><button class="close-x" onclick="closeModal()">✕</button></div>' +
-      '<div class="chat-log" style="max-height:220px;margin-bottom:10px">' + msgs + '</div>' +
-      '<input id="dm-input" placeholder="Message..." maxlength="500" style="width:100%;padding:12px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-family:inherit;margin-bottom:8px" />' +
-      '<button class="btn primary full" onclick="sendDM(\'' + otherId + '\',\'' + username.replace(/'/g, '') + '\')">Send</button>');
-  } catch (e) { toast(e.message); }
-};
-
-window.sendDM = async function (otherId, username) {
-  const input = document.getElementById('dm-input');
-  const body = (input && input.value || '').trim();
-  if (!body) return;
-  try {
-    await api('/api/messages', { method: 'POST', body: JSON.stringify({ toUserId: otherId, body: body }) });
-    openDM(otherId, username);
-  } catch (e) { toast(e.message); }
-};
-
-// Override openMore with v5 menu
-openMore = function () {
+function openMore() {
   const p = STATE.player;
-  const u = STATE.user;
-  let extra = '';
-  if (!STATE.guest) {
-    extra = '<div class="list-item" onclick="logout()"><div class="li-emoji">🚪</div><div class="li-body"><div class="li-title">Log out</div><div class="li-sub">Sign out of this device</div></div></div>';
-  } else {
-    extra = '<div class="list-item" onclick="location.reload()"><div class="li-emoji">🔑</div><div class="li-body"><div class="li-title">Create account</div><div class="li-sub">Save progress properly</div></div></div>';
-  }
-  openModal('<div class="close-row"><h3>⋯ More</h3><button class="close-x" onclick="closeModal()">✕</button></div>' +
-    '<p><strong>' + p.look_emoji + ' ' + p.name + '</strong>' + (u ? ' · @' + u.username : ' · Guest') + ' · Fame ' + (p.fame || 0) + '</p>' +
-    '<div class="list-item" onclick="openEvents()"><div class="li-emoji">🎉</div><div class="li-body"><div class="li-title">Events</div><div class="li-sub">Lounge nights & spray boards</div></div></div>' +
-    '<div class="list-item" onclick="openFriends()"><div class="li-emoji">👥</div><div class="li-body"><div class="li-title">Friends & DMs</div><div class="li-sub">Add people, private chat</div></div></div>' +
-    '<div class="list-item" onclick="openBoutique()"><div class="li-emoji">🛍️</div><div class="li-body"><div class="li-title">Boutique</div><div class="li-sub">Shades, chains, gele, phones</div></div></div>' +
-    '<div class="list-item" onclick="openLeaderboard()"><div class="li-emoji">🏆</div><div class="li-body"><div class="li-title">Fame board</div><div class="li-sub">Top players in Abuja</div></div></div>' +
-    '<div class="list-item" onclick="window.location=\'/rules.html\'"><div class="li-emoji">📜</div><div class="li-body"><div class="li-title">House rules</div><div class="li-sub">Be kind. No scams.</div></div></div>' + extra);
-};
-
-// DM socket listener
-if (typeof connectSocket === 'function') {
-  const _cs = connectSocket;
-  connectSocket = function () {
-    _cs();
-    if (STATE.socket) {
-      STATE.socket.on('dm', function (msg) {
-        toast('New message');
-      });
-    }
-  };
+  openModal(
+    '<div class="close-row"><h3>⋯ More</h3><button class="close-x" onclick="closeModal()">✕</button></div>' +
+    '<p><strong>' + p.look_emoji + ' ' + p.name + '</strong> · Fame ' + (p.fame || 0) + '</p>' +
+    '<div class="list-item" onclick="openBoutique()"><div class="li-emoji">🛍️</div><div class="li-body"><div class="li-title">Boutique</div><div class="li-sub">Buy & equip drip</div></div></div>' +
+    '<div class="list-item" onclick="window.location=\'/rules.html\'"><div class="li-emoji">📜</div><div class="li-body"><div class="li-title">House rules</div><div class="li-sub">Be kind. No scams.</div></div></div>' +
+    '<div class="list-item" onclick="resetPlayer()"><div class="li-emoji">🔄</div><div class="li-body"><div class="li-title">New person</div><div class="li-sub">Start over on this device</div></div></div>'
+  );
 }
+window.resetPlayer = function () {
+  if (!confirm('Start a new person? Current progress on this device will be cleared.')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  location.reload();
+};
+$('#btn-phone').onclick = openMore;

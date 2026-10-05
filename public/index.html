@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#0f172a" />
-  <meta name="description" content="Abuja Lifestyle – Live the capital. Login, hustle, spray money, real-time rooms." />
-  <title>Abuja Lifestyle | v3 · Scale-ready</title>
+  <meta name="description" content="Abuja Lifestyle – Live the capital. Hustle, spray money, real-time rooms. No login required." />
+  <title>Abuja Lifestyle</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
@@ -13,7 +13,7 @@
 </head>
 <body>
   <div id="app">
-    <!-- AUTH / INTRO -->
+    <!-- INTRO (no login) -->
     <section id="screen-intro" class="screen active">
       <div class="intro-bg"></div>
       <div class="intro-content">
@@ -22,26 +22,14 @@
           <h1>Abuja <em>Lifestyle</em></h1>
         </div>
         <p class="tagline">Capital city, live. Hustle, ride the bus, link up and spray money.</p>
-        <p class="sub">Real accounts · Real-time rooms · Everyone online is a real player (except NPCs).</p>
+        <p class="sub">No account needed. Jump in and play.</p>
         <div class="online-pill">
           <span class="dot"></span>
-          <span id="online-count">—</span> online · <span id="user-count">—</span> registered
+          <span id="online-count">—</span> online
         </div>
-
-        <div id="auth-panel">
-          <div class="auth-tabs">
-            <button type="button" class="tab active" data-tab="login">Login</button>
-            <button type="button" class="tab" data-tab="register">Sign up</button>
-          </div>
-          <form id="auth-form" novalidate>
-            <input type="text" id="auth-username" placeholder="Username (e.g. Chinedu or aisha_01)" autocomplete="username" maxlength="20" required pattern="[A-Za-z0-9_]{3,20}" title="Letters, numbers, underscore only. No spaces." />
-            <input type="password" id="auth-password" placeholder="Password (min 6 characters)" autocomplete="current-password" minlength="6" required />
-            <input type="email" id="auth-email" placeholder="Email (optional)" style="display:none" autocomplete="email" />
-            <p class="auth-hint" id="auth-hint">Username: letters, numbers, _ only · no spaces</p>
-            <button type="submit" class="btn primary full" id="auth-submit">Login</button>
-          </form>
-          <p class="auth-error" id="auth-error"></p>
-          <button type="button" class="btn ghost full" id="btn-guest" style="margin-top:10px">Play as guest (limited)</button>
+        <div class="intro-actions">
+          <button type="button" class="btn primary full" id="btn-play">Play now</button>
+          <button type="button" class="btn ghost full" id="btn-continue" style="display:none">Continue as <span id="saved-name"></span></button>
         </div>
         <p class="tiny">Free to play · Be kind · 18+</p>
         <a href="/rules.html" class="rules-link">House rules</a>
@@ -74,7 +62,7 @@
           <div class="stat"><span class="ico">⚡</span><div class="bar"><div id="bar-energy" class="fill"></div></div></div>
           <div class="stat"><span class="ico">✨</span><div class="bar"><div id="bar-vibe" class="fill"></div></div></div>
         </div>
-        <button type="button" class="icon-btn" id="btn-phone" title="Account">📱</button>
+        <button type="button" class="icon-btn" id="btn-phone" title="Menu">📱</button>
       </header>
 
       <div class="loc-banner">
