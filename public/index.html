@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="description" content="Abuja Lifestyle – Live the capital. Login, hustle, spray money, real-time rooms." />
+  <title>Abuja Lifestyle | v3 · Scale-ready</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <div id="app">
+    <!-- AUTH / INTRO -->
+    <section id="screen-intro" class="screen active">
+      <div class="intro-bg"></div>
+      <div class="intro-content">
+        <div class="logo">
+          <span class="logo-mark">🟢</span>
+          <h1>Abuja <em>Lifestyle</em></h1>
+        </div>
+        <p class="tagline">Capital city, live. Hustle, ride the bus, link up and spray money.</p>
+        <p class="sub">Real accounts · Real-time rooms · Everyone online is a real player (except NPCs).</p>
+        <div class="online-pill">
+          <span class="dot"></span>
+          <span id="online-count">—</span> online · <span id="user-count">—</span> registered
+        </div>
+
+        <div id="auth-panel">
+          <div class="auth-tabs">
+            <button type="button" class="tab active" data-tab="login">Login</button>
+            <button type="button" class="tab" data-tab="register">Sign up</button>
+          </div>
+          <form id="auth-form">
+            <input type="text" id="auth-username" placeholder="Username" autocomplete="username" maxlength="20" required />
+            <input type="password" id="auth-password" placeholder="Password (min 6)" autocomplete="current-password" minlength="6" required />
+            <input type="email" id="auth-email" placeholder="Email (optional)" style="display:none" autocomplete="email" />
+            <button type="submit" class="btn primary full" id="auth-submit">Login</button>
+          </form>
+          <p class="auth-error" id="auth-error"></p>
+          <button type="button" class="btn ghost full" id="btn-guest" style="margin-top:10px">Play as guest (limited)</button>
+        </div>
+        <p class="tiny">Free to play · Be kind · 18+</p>
+        <a href="/rules.html" class="rules-link">House rules</a>
+      </div>
+    </section>
+
+    <!-- CHARACTER CREATION -->
+    <section id="screen-create" class="screen">
+      <div class="create-header">
+        <h2>Who you be?</h2>
+        <p>Man or woman? Then pick your look.</p>
+      </div>
+      <div class="gender-row">
+        <button type="button" class="gender-btn" data-gender="male">👨 Man</button>
+        <button type="button" class="gender-btn" data-gender="female">👩 Woman</button>
+      </div>
+      <div class="look-grid" id="look-grid"></div>
+      <div class="name-row">
+        <input type="text" id="player-name" placeholder="Display name (e.g. Chinedu, Aisha…)" maxlength="18" />
+      </div>
+      <button type="button" class="btn primary full" id="btn-enter" disabled>Enter Abuja</button>
+    </section>
+
+    <!-- MAIN GAME -->
+    <section id="screen-game" class="screen">
+      <header class="topbar">
+        <div class="stats">
+          <div class="stat money"><span class="label">₦</span><span id="stat-money">0</span></div>
+          <div class="stat"><span class="ico">🍽️</span><div class="bar"><div id="bar-belly" class="fill"></div></div></div>
+          <div class="stat"><span class="ico">⚡</span><div class="bar"><div id="bar-energy" class="fill"></div></div></div>
+          <div class="stat"><span class="ico">✨</span><div class="bar"><div id="bar-vibe" class="fill"></div></div></div>
+        </div>
+        <button type="button" class="icon-btn" id="btn-phone" title="Account">📱</button>
+      </header>
+
+      <div class="loc-banner">
+        <div>
+          <h3 id="loc-name">Wuse Market</h3>
+          <p id="loc-desc">Busy, loud, everything dey for sale.</p>
+        </div>
+        <span class="loc-count" id="loc-people">— here</span>
+      </div>
+
+      <main class="scene">
+        <div class="people" id="people-list"></div>
+        <div class="chat-log" id="chat-log"></div>
+      </main>
+
+      <div class="reactions" id="reactions">
+        <button type="button" data-r="😂">😂</button>
+        <button type="button" data-r="🔥">🔥</button>
+        <button type="button" data-r="👏">👏</button>
+        <button type="button" data-r="💸">💸</button>
+        <button type="button" data-r="😮">😮</button>
+        <button type="button" data-r="❤️">❤️</button>
+      </div>
+
+      <nav class="bottom-nav">
+        <button type="button" data-action="map">🗺️ Map</button>
+        <button type="button" data-action="hustle">💼 Hustle</button>
+        <button type="button" data-action="chat">💬 Talk</button>
+        <button type="button" data-action="flex">💸 Flex</button>
+        <button type="button" data-action="more">⋯ More</button>
+      </nav>
+    </section>
+
+    <div id="modal-overlay" class="modal-overlay hidden">
+      <div class="modal" id="modal-content"></div>
+    </div>
+  </div>
+  <script src="/game.js"></script>
+</body>
+</html>
