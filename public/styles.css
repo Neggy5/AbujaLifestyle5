@@ -502,3 +502,20 @@ html, body {
   min-height: 1.2em;
   margin-top: 8px;
 }
+
+.auth-hint { font-size: 0.75rem; color: var(--muted); margin: -4px 0 4px; text-align: left; }
+.auth-error {
+  color: #fecaca !important;
+  background: rgba(239,68,68,.15);
+  border: 1px solid rgba(239,68,68,.35);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  min-height: 0;
+  margin-top: 10px;
+}
+.auth-error:empty { display: none; padding: 0; border: none; background: none; }
+.btn.loading { opacity: 0.7; pointer-events: none; }
+.btn:disabled { opacity: 0.45; }
+.create-tip { font-size: 0.8rem; color: var(--muted); margin-top: 8px; text-align: center; }

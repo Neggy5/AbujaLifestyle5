@@ -33,10 +33,11 @@
             <button type="button" class="tab active" data-tab="login">Login</button>
             <button type="button" class="tab" data-tab="register">Sign up</button>
           </div>
-          <form id="auth-form">
-            <input type="text" id="auth-username" placeholder="Username" autocomplete="username" maxlength="20" required />
-            <input type="password" id="auth-password" placeholder="Password (min 6)" autocomplete="current-password" minlength="6" required />
+          <form id="auth-form" novalidate>
+            <input type="text" id="auth-username" placeholder="Username (e.g. Chinedu or aisha_01)" autocomplete="username" maxlength="20" required pattern="[A-Za-z0-9_]{3,20}" title="Letters, numbers, underscore only. No spaces." />
+            <input type="password" id="auth-password" placeholder="Password (min 6 characters)" autocomplete="current-password" minlength="6" required />
             <input type="email" id="auth-email" placeholder="Email (optional)" style="display:none" autocomplete="email" />
+            <p class="auth-hint" id="auth-hint">Username: letters, numbers, _ only · no spaces</p>
             <button type="submit" class="btn primary full" id="auth-submit">Login</button>
           </form>
           <p class="auth-error" id="auth-error"></p>
@@ -51,7 +52,7 @@
     <section id="screen-create" class="screen">
       <div class="create-header">
         <h2>Who you be?</h2>
-        <p>Man or woman? Then pick your look.</p>
+        <p>1) Man or woman · 2) Pick a look · 3) Enter Abuja</p>
       </div>
       <div class="gender-row">
         <button type="button" class="gender-btn" data-gender="male">👨 Man</button>

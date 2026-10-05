@@ -121,13 +121,33 @@ document.querySelectorAll('.auth-tabs .tab').forEach(tab => {
 
 $('#auth-form').onsubmit = async (e) => {
   e.preventDefault();
-  $('#auth-error').textContent = '';
-  const username = $('#auth-username').value.trim();
-  const password = $('#auth-password').value;
-  const email = $('#auth-email').value.trim() || undefined;
+  const errEl = $('#auth-error');
+  errEl.textContent = '';
+  const username = ($('#auth-username').value || '').trim();
+  const password = $('#auth-password').value || '';
+  const email = ($('#auth-email').value || '').trim() || undefined;
+  const btn = $('#auth-submit');
+
+  if (username.length < 3 || username.length > 20) {
+    errEl.textContent = 'Username must be 3–20 characters.';
+    return;
+  }
+  if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+    errEl.textContent = 'Username: only letters, numbers, underscore. No spaces.';
+    return;
+  }
+  if (password.length < 6) {
+    errEl.textContent = 'Password must be at least 6 characters.';
+    return;
+  }
+
+  btn.classList.add('loading');
+  btn.textContent = authMode === 'login' ? 'Logging in…' : 'Creating account…';
   try {
     const endpoint = authMode === 'login' ? '/api/login' : '/api/register';
-    const body = authMode === 'login' ? { username: username, password: password } : { username: username, password: password, email: email };
+    const body = authMode === 'login'
+      ? { username: username, password: password }
+      : { username: username, password: password, email: email };
     const data = await api(endpoint, { method: 'POST', body: JSON.stringify(body) });
     STATE.token = data.token;
     STATE.user = data.user;
@@ -135,7 +155,9 @@ $('#auth-form').onsubmit = async (e) => {
     localStorage.setItem('abuja_token', data.token);
     await afterAuth();
   } catch (err) {
-    $('#auth-error').textContent = err.message;
+    errEl.textContent = err.message || 'Something went wrong. Try again.';
+    btn.classList.remove('loading');
+    btn.textContent = authMode === 'login' ? 'Login' : 'Create account';
   }
 };
 
@@ -177,7 +199,14 @@ document.querySelectorAll('.gender-btn').forEach(btn => {
     document.querySelectorAll('.gender-btn').forEach(b => b.classList.remove('selected'));
     btn.classList.add('selected');
     chosenGender = btn.dataset.gender;
+    chosenLook = null;
     renderLooks();
+    // Auto-select first look so Enter Abuja is easier
+    const first = LOOKS[chosenGender] && LOOKS[chosenGender][0];
+    if (first) {
+      chosenLook = first.id;
+      renderLooks();
+    }
     checkCreateReady();
   };
 });
@@ -197,7 +226,13 @@ function renderLooks() {
 $('#player-name').oninput = checkCreateReady;
 function checkCreateReady() {
   const name = $('#player-name').value.trim();
-  $('#btn-enter').disabled = !(chosenGender && chosenLook && name.length >= 2);
+  const ready = !!(chosenGender && chosenLook && name.length >= 2);
+  const btn = $('#btn-enter');
+  btn.disabled = !ready;
+  if (!chosenGender) btn.textContent = 'Pick Man or Woman first';
+  else if (!chosenLook) btn.textContent = 'Pick a look above';
+  else if (name.length < 2) btn.textContent = 'Enter a display name';
+  else btn.textContent = 'Enter Abuja';
 }
 
 $('#btn-enter').onclick = async () => {
